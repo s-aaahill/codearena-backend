@@ -1,0 +1,62 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String
+  username     String       @unique
+  role         Role         @default(USER)
+  submissions  Submission[]
+  createdAt    DateTime     @default(now())
+}
+
+model Problem {
+  id          String       @id @default(uuid())
+  title       String
+  description String
+  difficulty  Difficulty
+  testCases   TestCase[]
+  submissions Submission[]
+}
+
+model TestCase {
+  id             String  @id @default(uuid())
+  problemId      String
+  input          String
+  expectedOutput String
+  isHidden       Boolean @default(false)
+  problem        Problem @relation(fields: [problemId], references: [id])
+}
+
+model Submission {
+  id          String   @id @default(uuid())
+  userId      String
+  problemId   String
+  code        String
+  language    String
+  status      String   // e.g., "Accepted", "Wrong Answer", "Time Limit Exceeded"
+  executionMs Int?
+  user        User     @relation(fields: [userId], references: [id])
+  problem     Problem  @relation(fields: [problemId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
