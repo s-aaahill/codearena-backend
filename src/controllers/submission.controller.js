@@ -24,27 +24,23 @@ export const submitCode = async (req, res) => {
         const tempDir = path.join(process.cwd(), 'temp', uniqueId);
         await fs.mkdir(tempDir, { recursive: true });
 
-        let codeFilename, execCommand;
+        const codePath = path.join(tempDir, language === 'cpp' ? 'code.cpp' : 'code.py');
+        const inputPath = path.join(tempDir, 'input.txt');
+        const outPath = path.join(tempDir, 'out');
 
-        const uid = process.getuid ? process.getuid() : 1000; 
-        const gid = process.getgid ? process.getgid() : 1000;
+        await fs.writeFile(codePath, code);
 
-        if (language === 'python') {
-            codeFilename = 'code.py';
-            execCommand = `python3 ${path.join(tempDir, 'code.py')} < ${path.join(tempDir, 'input.txt')}`;
-        } else if (language === 'cpp') {
-            codeFilename = 'code.cpp';
-            const outPath = path.join(tempDir, 'out');
-            const cppPath = path.join(tempDir, 'code.cpp');
-            const inputPath = path.join(tempDir, 'input.txt');
-            execCommand = `g++ ${cppPath} -o ${outPath} && ${outPath} < ${inputPath}`;
+        if (language === 'cpp') {
+            try {
+                await execAsync(`g++ ${codePath} -o ${outPath}`, { timeout: 10000 });
+            } catch (compileErr) {
+                await fs.rm(tempDir, { recursive: true, force: true });
+                return res.status(200).json({ 
+                    status: "Compilation Error", 
+                    details: compileErr.stderr || "Check your C++ syntax." 
+                });
+            }
         }
-        
-
-        const codeFilePath = path.join(tempDir, codeFilename);
-        const inputFilePath = path.join(tempDir, 'input.txt');
-
-        await fs.writeFile(codeFilePath, code);
 
         let allPassed = true;
         let finalStatus = "Accepted";
@@ -52,12 +48,16 @@ export const submitCode = async (req, res) => {
         let maxExecutionTime = 0;
 
         for (const testCase of problem.testCases) {
-            await fs.writeFile(inputFilePath, testCase.input);
+            await fs.writeFile(inputPath, testCase.input);
+
+            let execCommand = language === 'python' 
+                ? `python3 ${codePath} < ${inputPath}` 
+                : `${outPath} < ${inputPath}`;
 
             try {
                 const startTime = Date.now();
                 
-                const { stdout } = await execAsync(execCommand, { timeout: 3000 }); 
+                const { stdout } = await execAsync(execCommand, { timeout: 5000 });
                 
                 const executionTime = Date.now() - startTime;
                 maxExecutionTime = Math.max(maxExecutionTime, executionTime);
@@ -73,15 +73,14 @@ export const submitCode = async (req, res) => {
                         : `Input: ${testCase.input} | Expected: ${expectedOutput} | Got: ${actualOutput}`;
                     break;
                 }
-            } catch (error) {
+            } catch (err) {
                 allPassed = false;
-                
-                if (error.killed) {
+                if (err.killed) {
                     finalStatus = "Time Limit Exceeded";
-                    failureDetails = "Code took too long to execute.";
+                    failureDetails = "Your code was too slow for the cloud. Try optimizing your algorithm.";
                 } else {
-                    finalStatus = "Runtime/Compilation Error";
-                    failureDetails = error.stderr || error.message;
+                    finalStatus = "Runtime Error";
+                    failureDetails = err.stderr || "Check for infinite loops or memory issues.";
                 }
                 break;
             }
@@ -90,26 +89,14 @@ export const submitCode = async (req, res) => {
         await fs.rm(tempDir, { recursive: true, force: true });
 
         const submission = await prisma.submission.create({
-            data: {
-                code,
-                language,
-                status: finalStatus,
-                executionMs: maxExecutionTime,
-                userId,
-                problemId
-            }
+            data: { code, language, status: finalStatus, executionMs: maxExecutionTime, userId, problemId }
         });
 
-        res.status(200).json({ 
-            status: finalStatus, 
-            details: failureDetails,
-            executionMs: maxExecutionTime,
-            submissionId: submission.id 
-        });
+        res.status(200).json({ status: finalStatus, details: failureDetails, executionMs: maxExecutionTime, submissionId: submission.id });
 
     } catch (error) {
         console.error("Execution error:", error);
-        res.status(500).json({ error: "Failed to execute code" });
+        res.status(500).json({ error: "Internal server error" });
     }
 };
 
