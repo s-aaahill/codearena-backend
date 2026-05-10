@@ -12,6 +12,8 @@ RUN npx prisma generate
 
 COPY . .
 
+RUN mkdir -p temp && chmod 777 temp
+
 EXPOSE 5000
 
 CMD ["npm", "start"]

@@ -31,11 +31,15 @@ export const submitCode = async (req, res) => {
 
         if (language === 'python') {
             codeFilename = 'code.py';
-            execCommand = `docker run --rm --network none --memory 256m --user ${uid}:${gid} -v ${tempDir}:/app codearena-sandbox sh -c "python3 /app/code.py < /app/input.txt"`;
+            execCommand = `python3 ${path.join(tempDir, 'code.py')} < ${path.join(tempDir, 'input.txt')}`;
         } else if (language === 'cpp') {
             codeFilename = 'code.cpp';
-            execCommand = `docker run --rm --network none --memory 256m --user ${uid}:${gid} -v ${tempDir}:/app codearena-sandbox sh -c "g++ /app/code.cpp -o /app/out && /app/out < /app/input.txt"`;
+            const outPath = path.join(tempDir, 'out');
+            const cppPath = path.join(tempDir, 'code.cpp');
+            const inputPath = path.join(tempDir, 'input.txt');
+            execCommand = `g++ ${cppPath} -o ${outPath} && ${outPath} < ${inputPath}`;
         }
+        
 
         const codeFilePath = path.join(tempDir, codeFilename);
         const inputFilePath = path.join(tempDir, 'input.txt');
