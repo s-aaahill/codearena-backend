@@ -21,6 +21,12 @@ export const register = async (req, res) => {
             data: { email, username, passwordHash }
         });
 
+        const token = jwt.sign (
+            { id: newUser.id },
+            process.env.JWT_SECRET,
+            { expiresIn: '1d' }
+        ); 
+        
         res.cookie('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
